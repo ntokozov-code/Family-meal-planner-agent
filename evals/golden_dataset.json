@@ -1,0 +1,18 @@
+[
+  {
+    "case_id": "peanut_allergy_family",
+    "family_size": 4,
+    "allergens": ["peanut", "tree nuts"],
+    "time_limit": 30,
+    "expected_safety": true,
+    "forbidden_detected": []
+  },
+  {
+    "case_id": "shellfish_intolerance_family",
+    "family_size": 2,
+    "allergens": ["shrimp", "crab", "shellfish"],
+    "time_limit": 20,
+    "expected_safety": true,
+    "forbidden_detected": []
+  }
+]
