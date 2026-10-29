@@ -1,2 +1,6 @@
 streamlit
 google-genai
+pydantic
+tenacity
+pytest
+aiosqlite
