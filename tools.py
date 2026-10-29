@@ -1,7 +1,7 @@
 """
 tools.py - Agent Tools with explicit Pydantic JSON Schemas, typing, and guided recovery.
 """
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 
 # --- Explicit Pydantic JSON Schemas ---
@@ -32,17 +32,19 @@ ALLERGEN_TOOL_SCHEMA = AllergenCheckInput.model_json_schema()
 GROCERY_TOOL_SCHEMA = GroceryCategorizeInput.model_json_schema()
 
 def check_allergen_compliance(ingredients: List[str], known_allergens: List[str]) -> Dict[str, Any]:
-    """Validates ingredients against known severe allergens with schema validation."""
+    """Validates ingredients against known severe allergens with stem and plural awareness."""
     try:
-        # Validate against Pydantic schema
         validated_input = AllergenCheckInput(ingredients=ingredients, known_allergens=known_allergens)
         detected = []
         for allergen in validated_input.known_allergens:
             allergen_clean = allergen.strip().lower()
             if not allergen_clean:
                 continue
+            # Check both full word and singular stem (e.g. "peanuts" -> "peanut")
+            stem = allergen_clean.rstrip("s")
             for item in validated_input.ingredients:
-                if allergen_clean in item.lower():
+                item_lower = item.lower()
+                if allergen_clean in item_lower or (len(stem) > 3 and stem in item_lower):
                     detected.append(AllergenViolation(allergen=allergen, found_in=item))
 
         result = AllergenCheckOutput(
