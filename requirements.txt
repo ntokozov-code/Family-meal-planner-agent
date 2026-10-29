@@ -4,3 +4,5 @@ pydantic
 tenacity
 pytest
 aiosqlite
+opentelemetry-api
+opentelemetry-sdk
