@@ -1,4 +1,4 @@
-# Infrastructure as Code (IaC) - Terraform configuration for Cloud Deployment
+# Infrastructure as Code (IaC) - Terraform Cloud Architecture
 terraform {
   required_version = ">= 1.5.0"
   required_providers {
@@ -14,18 +14,20 @@ provider "google" {
   region  = var.region
 }
 
-variable "project_id" {
-  type        = string
-  description = "GCP Project ID for deploying the meal planning agent"
-  default     = "meal-agent-prod"
+# Dedicated Secure Secret Management via Secret Manager
+resource "google_secret_manager_secret" "gemini_api_key" {
+  secret_id = "gemini-api-key"
+  replication {
+    auto {}
+  }
 }
 
-variable "region" {
-  type        = string
-  description = "Target deployment cloud region"
-  default     = "us-central1"
+resource "google_secret_manager_secret_version" "gemini_api_key_version" {
+  secret      = google_secret_manager_secret.gemini_api_key.id
+  secret_data = var.gemini_api_key_secret_data
 }
 
+# Cloud Run Containerized Microservice Deployment
 resource "google_cloud_run_v2_service" "meal_agent_service" {
   name     = "family-meal-concierge-agent"
   location = var.region
@@ -43,7 +45,7 @@ resource "google_cloud_run_v2_service" "meal_agent_service" {
         name = "GEMINI_API_KEY"
         value_source {
           secret_key_ref {
-            secret  = "gemini-api-key"
+            secret  = google_secret_manager_secret.gemini_api_key.secret_id
             version = "latest"
           }
         }
@@ -54,5 +56,5 @@ resource "google_cloud_run_v2_service" "meal_agent_service" {
 
 output "service_url" {
   value       = google_cloud_run_v2_service.meal_agent_service.uri
-  description = "Publicly accessible endpoint of deployed Meal Agent"
+  description = "Public URL of deployed Meal Concierge Agent"
 }
