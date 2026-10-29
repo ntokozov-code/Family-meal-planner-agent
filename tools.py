@@ -1,77 +1,80 @@
 """
-tools.py - Agent Tools with strict schemas, docstrings, and guided error handling.
+tools.py - Agent Tools with explicit Pydantic JSON Schemas, typing, and guided recovery.
 """
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field
 
-def check_allergen_compliance(
-    ingredients: List[str], 
-    known_allergens: List[str]
-) -> Dict[str, Any]:
-    """
-    Validates recipe ingredients against a family's list of severe allergens.
+# --- Explicit Pydantic JSON Schemas ---
+class AllergenCheckInput(BaseModel):
+    ingredients: List[str] = Field(..., description="List of proposed ingredients in the meal plan.")
+    known_allergens: List[str] = Field(..., description="Severe family allergens to block.")
 
-    Args:
-        ingredients (List[str]): List of ingredients in the proposed meal.
-        known_allergens (List[str]): Prohibited allergens (e.g., ['peanuts', 'shellfish', 'gluten']).
+class AllergenViolation(BaseModel):
+    allergen: str
+    found_in: str
 
-    Returns:
-        Dict[str, Any]: Validation report with 'is_safe' boolean, detected violations, and guided remediation.
-    """
+class AllergenCheckOutput(BaseModel):
+    status: str
+    is_safe: bool
+    violations: List[AllergenViolation]
+    remediation_guidance: str
+
+class GroceryCategorizeInput(BaseModel):
+    items: List[str] = Field(..., description="Raw grocery items needed for dinner recipes.")
+
+class GroceryCategorizeOutput(BaseModel):
+    status: str
+    categorized_items: Dict[str, List[str]]
+    total_items: int
+
+# OpenAPI / JSON Schema exports
+ALLERGEN_TOOL_SCHEMA = AllergenCheckInput.model_json_schema()
+GROCERY_TOOL_SCHEMA = GroceryCategorizeInput.model_json_schema()
+
+def check_allergen_compliance(ingredients: List[str], known_allergens: List[str]) -> Dict[str, Any]:
+    """Validates ingredients against known severe allergens with schema validation."""
     try:
-        if not isinstance(ingredients, list) or not isinstance(known_allergens, list):
-            raise TypeError("Both ingredients and known_allergens must be provided as lists of strings.")
-
+        # Validate against Pydantic schema
+        validated_input = AllergenCheckInput(ingredients=ingredients, known_allergens=known_allergens)
         detected = []
-        for allergen in known_allergens:
+        for allergen in validated_input.known_allergens:
             allergen_clean = allergen.strip().lower()
             if not allergen_clean:
                 continue
-            for item in ingredients:
+            for item in validated_input.ingredients:
                 if allergen_clean in item.lower():
-                    detected.append({"allergen": allergen, "found_in": item})
+                    detected.append(AllergenViolation(allergen=allergen, found_in=item))
 
-        return {
-            "status": "success",
-            "is_safe": len(detected) == 0,
-            "violations": detected,
-            "remediation_guidance": "Substitute flagged ingredients with allergen-safe alternatives immediately." if detected else "All clear."
-        }
+        result = AllergenCheckOutput(
+            status="success",
+            is_safe=len(detected) == 0,
+            violations=detected,
+            remediation_guidance="Replace flagged items with allergy-safe substitutes." if detected else "All ingredients safe."
+        )
+        return result.model_dump()
     except Exception as e:
         return {
             "status": "error",
-            "error_type": type(e).__name__,
-            "message": str(e),
-            "remediation_guidance": "Ensure inputs are valid lists of ingredient strings."
+            "is_safe": False,
+            "violations": [],
+            "remediation_guidance": f"Schema validation error: {str(e)}. Provide lists of strings."
         }
-
 
 def categorize_grocery_list(items: List[str]) -> Dict[str, Any]:
-    """
-    Sorts a raw grocery list into store departments for efficient family shopping.
-
-    Args:
-        items (List[str]): List of raw grocery items (e.g., ['apples', 'chicken breasts', 'milk']).
-
-    Returns:
-        Dict[str, Any]: Categorized grocery list grouped by department.
-    """
+    """Categorizes ingredients by store department using Pydantic validation."""
     try:
-        categories: Dict[str, List[str]] = {
-            "Produce": [],
-            "Meat & Seafood": [],
-            "Dairy & Refrigerated": [],
-            "Pantry & Grains": [],
-            "Spices & Condiments": []
+        validated = GroceryCategorizeInput(items=items)
+        categories = {
+            "Produce": [], "Meat & Seafood": [], "Dairy & Refrigerated": [], 
+            "Pantry & Grains": [], "Spices & Condiments": []
         }
-
         keywords = {
-            "Produce": ["apple", "onion", "garlic", "spinach", "potato", "carrot", "herb", "lemon", "vegetable", "lettuce", "tomato"],
-            "Meat & Seafood": ["chicken", "beef", "pork", "salmon", "turkey", "fish", "shrimp", "steak"],
-            "Dairy & Refrigerated": ["milk", "cheese", "butter", "yogurt", "cream", "egg", "tofu"],
-            "Pantry & Grains": ["rice", "pasta", "flour", "beans", "broth", "oil", "oats", "canned"],
+            "Produce": ["apple", "onion", "garlic", "spinach", "potato", "carrot", "herb", "lemon", "vegetable"],
+            "Meat & Seafood": ["chicken", "beef", "pork", "salmon", "turkey", "shrimp"],
+            "Dairy & Refrigerated": ["milk", "cheese", "butter", "yogurt", "cream", "egg"],
+            "Pantry & Grains": ["rice", "pasta", "flour", "beans", "broth", "oil", "oats"],
         }
-
-        for item in items:
+        for item in validated.items:
             item_lower = item.lower()
             assigned = False
             for cat, words in keywords.items():
@@ -82,15 +85,11 @@ def categorize_grocery_list(items: List[str]) -> Dict[str, Any]:
             if not assigned:
                 categories["Spices & Condiments"].append(item)
 
-        return {
-            "status": "success",
-            "categorized_items": categories,
-            "total_items": len(items)
-        }
+        output = GroceryCategorizeOutput(
+            status="success",
+            categorized_items=categories,
+            total_items=len(validated.items)
+        )
+        return output.model_dump()
     except Exception as e:
-        return {
-            "status": "error",
-            "error_type": type(e).__name__,
-            "message": str(e),
-            "remediation_guidance": "Provide grocery items as a valid list of strings."
-        }
+        return {"status": "error", "message": str(e), "remediation_guidance": "Input must be a list of strings."}
